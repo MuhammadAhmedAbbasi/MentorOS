@@ -1,0 +1,20 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: mentoros_db
+    environment:
+      POSTGRES_USER: mentoros
+      POSTGRES_PASSWORD: mentoros
+      POSTGRES_DB: mentoros
+    ports:
+      - "5432:5432"
+    volumes:
+      - mentoros_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mentoros -d mentoros"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mentoros_pgdata:

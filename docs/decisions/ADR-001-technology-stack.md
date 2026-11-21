@@ -15,6 +15,9 @@ Mature async support, strong typing, the only ecosystem with LangGraph, SymPy, S
 ### FastAPI
 Async-native, Pydantic-integrated, excellent OpenAPI generation. DRF/Flask considered; both lack native async ergonomics needed for LangGraph invocation.
 
+### LLM Provider (Ollama) + Model
+v0.1 uses local Ollama with **qwen3.5:9b** for all tutoring nodes. Anthropic Claude is added later behind the provider abstraction (ADR-002). Embeddings use **qwen3-embedding:0.6b** via Ollama, prepared for v0.2 pgvector semantic memory; no embedding calls run in v0.1. Running locally keeps cost at zero during development and avoids network latency; the provider abstraction means swapping to Anthropic later is an env-var change.
+
 ### LangGraph (not LangChain LCEL alone, not raw LLM calls)
 The tutoring loop is a stateful conditional graph, not a chain. LangGraph gives typed state, conditional edges, checkpointing, and testability with mocked nodes. The tradeoff is added dependency weight; accepted because the graph structure is a genuine requirement.
 
