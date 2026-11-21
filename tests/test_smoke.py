@@ -6,19 +6,26 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
+@pytest.fixture(autouse=True)
+def clear_settings_cache():
+    """Ensure each test gets a fresh Settings instance."""
+    from mentoros.core.config import get_settings
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
 
 
 @pytest.fixture
-def app():
-    # Override settings so tests run without a real .env file.
-    import os
-    os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://mentoros:mentoros@localhost:5432/mentoros")
-    os.environ.setdefault("LLM_PROVIDER", "ollama")
-    os.environ.setdefault("LLM_MODEL", "qwen3.5:9b")
+def set_env(monkeypatch):
+    """Apply a minimal valid environment for tests that create the app."""
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://mentoros:mentoros@localhost:5432/mentoros")
+    monkeypatch.setenv("LLM_PROVIDER", "ollama")
+    monkeypatch.setenv("LLM_MODEL", "qwen3.5:9b")
+    monkeypatch.setenv("APP_ENV", "development")
 
+
+@pytest.fixture
+def app(set_env):
     from mentoros.main import create_app
     return create_app()
 
@@ -26,20 +33,16 @@ def app():
 def test_imports():
     """All core modules import without error."""
     import mentoros
-    from mentoros.core.config import get_settings
-    from mentoros.core.logging import get_logger
-    from mentoros.core.exceptions import MentorOSError, StudentNotFoundError
+    from mentoros.core.config import get_settings  # noqa: F401
+    from mentoros.core.exceptions import MentorOSError, StudentNotFoundError  # noqa: F401
+    from mentoros.core.logging import get_logger  # noqa: F401
     assert mentoros.__version__ == "0.1.0"
 
 
-def test_settings_defaults():
-    """Settings load with expected defaults."""
-    import os
-    os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://mentoros:mentoros@localhost:5432/mentoros")
-
-    # Clear lru_cache so env overrides take effect in tests.
+def test_settings_defaults(monkeypatch):
+    """Settings load with expected defaults when env is clean."""
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://mentoros:mentoros@localhost:5432/mentoros")
     from mentoros.core.config import get_settings
-    get_settings.cache_clear()
     s = get_settings()
     assert s.llm_provider == "ollama"
     assert s.llm_model == "qwen3.5:9b"
@@ -58,11 +61,19 @@ async def test_health_endpoint(app):
 
 
 @pytest.mark.anyio
-async def test_health_sets_request_id_header(app):
-    """Health response echoes or generates an X-Request-Id header."""
+async def test_health_echoes_request_id(app):
+    """Health response echoes a valid X-Request-Id header."""
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/api/v1/health", headers={"X-Request-Id": "test-123"})
-    assert response.headers.get("x-request-id") == "test-123"
+        response = await client.get("/api/v1/health", headers={"X-Request-Id": "test-abc-123"})
+    assert response.headers.get("x-request-id") == "test-abc-123"
+
+
+@pytest.mark.anyio
+async def test_health_generates_request_id_when_absent(app):
+    """Health response generates an X-Request-Id when none is supplied."""
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/v1/health")
+    assert response.headers.get("x-request-id")  # non-empty
 
 
 @pytest.mark.anyio

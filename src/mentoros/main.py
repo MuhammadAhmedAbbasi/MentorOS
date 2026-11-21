@@ -17,7 +17,12 @@ from mentoros import __version__
 from mentoros.api.routes import api_router
 from mentoros.core.config import get_settings
 from mentoros.core.exceptions import register_exception_handlers
-from mentoros.core.logging import configure_logging, get_logger, set_request_id
+from mentoros.core.logging import (
+    configure_logging,
+    get_logger,
+    reset_request_context,
+    set_request_id,
+)
 
 logger = get_logger(__name__)
 
@@ -53,12 +58,17 @@ def create_app() -> FastAPI:
             allow_headers=["*"],
         )
 
-    # Request ID middleware — attaches a UUID to every request for tracing.
+    # Request ID middleware — validates/generates X-Request-Id and resets context after each request.
     @application.middleware("http")
     async def attach_request_id(request: Request, call_next):  # type: ignore[no-untyped-def]
-        request_id = request.headers.get("X-Request-Id", str(uuid.uuid4()))
+        raw = request.headers.get("X-Request-Id", "")
+        # Accept only non-empty strings up to 64 chars; generate a fresh UUID otherwise.
+        request_id = raw.strip()[:64] if raw.strip() else str(uuid.uuid4())
         set_request_id(request_id)
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        finally:
+            reset_request_context()
         response.headers["X-Request-Id"] = request_id
         return response
 

@@ -11,6 +11,7 @@ import json
 import logging
 import sys
 from contextvars import ContextVar
+from datetime import UTC, datetime
 from typing import Any
 
 # Context vars for trace IDs — set per request by middleware.
@@ -22,8 +23,12 @@ class JsonFormatter(logging.Formatter):
     """Format every record as a single JSON line."""
 
     def format(self, record: logging.LogRecord) -> str:
+        # Build a timezone-aware UTC timestamp with microseconds.
+        ts = datetime.fromtimestamp(record.created, tz=UTC).strftime(
+            "%Y-%m-%dT%H:%M:%S.%f"
+        ) + "Z"
         payload: dict[str, Any] = {
-            "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S.%fZ"),
+            "timestamp": ts,
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -79,6 +84,12 @@ def set_request_id(request_id: str) -> None:
 
 def set_session_id(session_id: str | None) -> None:
     session_id_var.set(session_id)
+
+
+def reset_request_context() -> None:
+    """Clear request-scoped context vars. Called at the end of each request."""
+    request_id_var.set(None)
+    session_id_var.set(None)
 
 
 def get_logger(name: str = "mentoros") -> logging.Logger:
