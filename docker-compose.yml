@@ -7,7 +7,9 @@ services:
       POSTGRES_PASSWORD: mentoros
       POSTGRES_DB: mentoros
     ports:
-      - "5432:5432"
+      # Host port 5433 avoids clashing with a native PostgreSQL on 5432.
+      # Override with POSTGRES_HOST_PORT if needed.
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
     volumes:
       - mentoros_pgdata:/var/lib/postgresql/data
     healthcheck:

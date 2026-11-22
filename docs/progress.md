@@ -2,9 +2,9 @@
 
 ## Current Status
 
-**Day:** 2
+**Day:** 3
 **Task:** Complete
-**Date:** 2026-11-21
+**Date:** 2026-11-22
 
 ---
 
@@ -86,11 +86,51 @@
 
 ---
 
-## Day 3 — Database and Curriculum Foundation
+## Day 3 — Database and Curriculum Foundation ✓
 
-**Status:** Not started
+### Verification Results
 
-Prerequisite: `docker compose up -d` running before Day 3 begins.
+| Check | Result |
+|---|---|
+| `docker compose ps` | ✓ `mentoros_db` healthy, pgvector 0.8.7 available |
+| `alembic upgrade head` | ✓ 13 tables created |
+| `alembic downgrade base` → `upgrade head` | ✓ Round-trips cleanly |
+| `alembic check` | ✓ No drift between models and migration |
+| `python scripts/seed_curriculum.py` (run twice) | ✓ 10 topics, 11 prerequisite edges, no duplicates |
+| `pytest -q` | ✓ 15 passed (6 smoke, 9 database), 0 warnings |
+| `ruff check src tests scripts migrations` | ✓ Clean |
+
+### Decisions Made
+
+| # | Decision | Reason |
+|---|---|---|
+| 1 | Docker Postgres on host port **5433** | A native PostgreSQL service (`postgresql-x64-19`) holds 5432 on this machine; connections to 5432 were reaching it, not Docker |
+| 2 | Models live in each domain's `models.py`; `mentoros/models.py` is the registry | Keeps domain ownership; Alembic needs one import that sees every table |
+| 3 | Engine created lazily (`get_engine()`), not at import | Importing the app never opens a connection; tests can set the URL first |
+| 4 | `student_memories` (pgvector) deferred to its own v0.2 migration | An unused table is cost with no benefit; image already has pgvector |
+| 5 | Added `learning_events.idempotency_key` (unique, nullable) | Requirement: idempotent learning events |
+| 6 | CHECK constraints instead of PG ENUM types | Easier to evolve in migrations |
+| 7 | Separate `mentoros_test` database; each test rolls back | Tests never touch dev data or each other |
+
+### Files Created/Modified
+
+- `src/mentoros/infrastructure/database/engine.py`, `mixins.py`
+- `src/mentoros/domains/{students,curriculum,assessment,memory}/models.py`
+- `src/mentoros/models.py`
+- `src/mentoros/domains/curriculum/seed.py`, `data/mathematics.py`
+- `scripts/seed_curriculum.py`
+- `alembic.ini`, `migrations/env.py`, `migrations/versions/050886459566_initial_schema.py`
+- `tests/test_database.py`
+- `docker-compose.yml`, `.env.example`, `core/config.py` (port 5433)
+- `main.py` (dispose engine on shutdown)
+- `.github/workflows/ci.yml` (Postgres service, migrations, seed)
+- `README.md`, `docs/architecture/database-schema.md`
+
+### Outstanding Issues
+
+- Docker CLI is not on the default PATH in new terminals; add `C:\Users\Administrator\AppData\Local\Programs\DockerDesktop\resources\bin` to the user PATH.
+- Two native PostgreSQL services are installed (16 stopped, 19 running). They are not used by MentorOS and can be uninstalled.
+- CI changes are untested until the first push runs on GitHub.
 
 ---
 

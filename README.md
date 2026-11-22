@@ -53,7 +53,8 @@ Key variables:
 
 | Variable | Default | Description |
 |---|---|---|
-| `DATABASE_URL` | `postgresql+asyncpg://mentoros:mentoros@localhost:5432/mentoros` | Async PostgreSQL URL |
+| `DATABASE_URL` | `postgresql+asyncpg://mentoros:mentoros@localhost:5433/mentoros` | Async PostgreSQL URL |
+| `TEST_DATABASE_URL` | `postgresql+asyncpg://mentoros:mentoros@localhost:5433/mentoros_test` | Database used by `tests/test_database.py` |
 | `LLM_PROVIDER` | `ollama` | `ollama` or `anthropic` |
 | `LLM_MODEL` | `qwen3.5:9b` | Model name for the chosen provider |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Local Ollama server |
@@ -81,6 +82,20 @@ docker compose down
 
 Data is persisted in the `mentoros_pgdata` Docker volume between restarts.
 
+The container publishes PostgreSQL on host port **5433**, so it does not clash with a natively installed PostgreSQL on 5432. Set `POSTGRES_HOST_PORT` to change it.
+
+### Migrations and seed data
+
+```bash
+alembic upgrade head                 # create / update all tables
+python scripts/seed_curriculum.py    # load the 10 mathematics topics (safe to re-run)
+```
+
+After changing ORM models, generate a migration and review it before applying:
+```bash
+alembic revision --autogenerate -m "describe the change"
+```
+
 ---
 
 ## Running the API
@@ -101,9 +116,15 @@ Interactive API docs: [http://localhost:8000/api/docs](http://localhost:8000/api
 
 ## Running Tests
 
+Database tests need a separate test database (created once):
+```bash
+docker exec mentoros_db psql -U mentoros -d mentoros -c "CREATE DATABASE mentoros_test"
+```
+
 ```bash
 pytest -q
 ```
+If the test database is unreachable, the database tests are skipped rather than failing.
 
 Run with verbose output:
 ```bash

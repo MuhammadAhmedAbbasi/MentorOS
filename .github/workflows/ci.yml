@@ -10,6 +10,27 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: mentoros
+          POSTGRES_PASSWORD: mentoros
+          POSTGRES_DB: mentoros
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mentoros -d mentoros"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://mentoros:mentoros@localhost:5432/mentoros
+      TEST_DATABASE_URL: postgresql+asyncpg://mentoros:mentoros@localhost:5432/mentoros_test
+      LLM_PROVIDER: ollama
+      LLM_MODEL: qwen3.5:9b
+
     steps:
       - uses: actions/checkout@v4
 
@@ -22,11 +43,16 @@ jobs:
         run: pip install -e ".[dev]"
 
       - name: Ruff lint
-        run: ruff check src tests
+        run: ruff check src tests scripts migrations
+
+      - name: Create test database
+        run: PGPASSWORD=mentoros psql -h localhost -U mentoros -d mentoros -c "CREATE DATABASE mentoros_test"
+
+      - name: Apply migrations
+        run: alembic upgrade head
+
+      - name: Seed curriculum
+        run: python scripts/seed_curriculum.py
 
       - name: Run tests
-        env:
-          DATABASE_URL: postgresql+asyncpg://mentoros:mentoros@localhost:5432/mentoros
-          LLM_PROVIDER: ollama
-          LLM_MODEL: qwen3.5:9b
         run: pytest -q

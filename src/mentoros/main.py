@@ -23,6 +23,7 @@ from mentoros.core.logging import (
     reset_request_context,
     set_request_id,
 )
+from mentoros.infrastructure.database.engine import dispose_engine
 
 logger = get_logger(__name__)
 
@@ -32,6 +33,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     logger.info("MentorOS starting up", extra={"version": __version__, "env": settings.app_env})
     yield
+    await dispose_engine()
     logger.info("MentorOS shutting down")
 
 
