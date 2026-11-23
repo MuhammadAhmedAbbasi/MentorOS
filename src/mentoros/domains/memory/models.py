@@ -16,6 +16,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Integer,
     Numeric,
     Text,
@@ -33,6 +34,11 @@ SCORE = Numeric(4, 3)  # 0.000 - 1.000
 
 class TutoringSession(Base):
     __tablename__ = "tutoring_sessions"
+    __table_args__ = (
+        # Needed so Message and ExerciseAttempt can reference (student_id, id) as a compound FK,
+        # preventing a message from referencing a session owned by a different student.
+        UniqueConstraint("student_id", "id", name="uq_tutoring_sessions_student_id"),
+    )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     student_id: Mapped[uuid.UUID] = mapped_column(
@@ -47,11 +53,19 @@ class Message(Base):
     __tablename__ = "messages"
     __table_args__ = (
         CheckConstraint("role IN ('student', 'assistant')", name="role_values"),
+        # Compound FK: session_id must belong to this message's student.
+        # Prevents a message referencing a session owned by a different student.
+        ForeignKeyConstraint(
+            ["student_id", "session_id"],
+            ["tutoring_sessions.student_id", "tutoring_sessions.id"],
+            ondelete="CASCADE",
+            name="fk_messages_student_session",
+        ),
     )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     session_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("tutoring_sessions.id", ondelete="CASCADE"), index=True
+        UUID(as_uuid=True), index=True
     )
     student_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("students.id", ondelete="CASCADE"), index=True

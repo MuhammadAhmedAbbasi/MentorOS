@@ -9,8 +9,15 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import CheckConstraint, ForeignKey, Integer, SmallInteger, Text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import (
+    CheckConstraint,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Integer,
+    SmallInteger,
+    Text,
+)
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mentoros.infrastructure.database.engine import Base
@@ -42,9 +49,15 @@ class ExerciseAttempt(Base):
             "result IN ('correct', 'incorrect', 'ambiguous')", name="result_values"
         ),
         CheckConstraint("hints_used >= 0", name="hints_non_negative"),
+        # Compound FK: session_id must belong to this attempt's student.
+        ForeignKeyConstraint(
+            ["student_id", "session_id"],
+            ["tutoring_sessions.student_id", "tutoring_sessions.id"],
+            ondelete="CASCADE",
+            name="fk_exercise_attempts_student_session",
+        ),
     )
 
-    # Also the idempotency key for the mastery update this attempt produces.
     id: Mapped[uuid.UUID] = uuid_pk()
     exercise_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("exercises.id", ondelete="RESTRICT"), index=True
@@ -53,7 +66,7 @@ class ExerciseAttempt(Base):
         ForeignKey("students.id", ondelete="CASCADE"), index=True
     )
     session_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("tutoring_sessions.id", ondelete="CASCADE"), index=True
+        UUID(as_uuid=True), index=True
     )
     student_answer: Mapped[str] = mapped_column(Text)
     result: Mapped[str] = mapped_column(Text)

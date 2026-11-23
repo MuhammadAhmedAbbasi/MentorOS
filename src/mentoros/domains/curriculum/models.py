@@ -27,13 +27,14 @@ class Topic(Base):
     __tablename__ = "topics"
     __table_args__ = (
         CheckConstraint("difficulty BETWEEN 1 AND 10", name="difficulty_range"),
+        UniqueConstraint("subject_id", "code", name="uq_topics_subject_code"),
     )
 
     id: Mapped[uuid.UUID] = uuid_pk()
     subject_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("subjects.id", ondelete="RESTRICT"), index=True
     )
-    code: Mapped[str] = mapped_column(Text, unique=True)
+    code: Mapped[str] = mapped_column(Text)  # unique within subject only
     name: Mapped[str] = mapped_column(Text)
     difficulty: Mapped[int] = mapped_column(SmallInteger)
     description: Mapped[str] = mapped_column(Text, default="")

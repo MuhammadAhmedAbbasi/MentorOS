@@ -41,6 +41,8 @@ TEST_DATABASE_URL = os.environ.get(
     "TEST_DATABASE_URL", "postgresql+asyncpg://mentoros:mentoros@localhost:5433/mentoros_test"
 )
 
+# When CI=true the database must be reachable; skip is not acceptable.
+_CI = os.environ.get("CI", "").lower() in ("1", "true")
 
 
 @pytest.fixture
@@ -51,6 +53,8 @@ async def session():
             await conn.run_sync(Base.metadata.create_all)
     except OSError as exc:  # connection refused / reset
         await engine.dispose()
+        if _CI:
+            pytest.fail(f"test database unavailable in CI: {exc}")
         pytest.skip(f"test database unavailable: {exc}")
 
     async with engine.connect() as conn:
@@ -196,3 +200,67 @@ async def test_deleting_student_cascades_to_their_data(session):
         select(func.count()).select_from(Message).where(Message.student_id == student.id)
     )
     assert remaining == 0
+
+
+async def test_message_cannot_reference_another_students_session(session):
+    """A message must not reference a session owned by a different student."""
+    await _seeded(session)
+    subject_id = await session.scalar(select(Subject.id).where(Subject.code == "math"))
+
+    student_a = Student(display_name="Student A")
+    student_b = Student(display_name="Student B")
+    session.add_all([student_a, student_b])
+    await session.flush()
+
+    # Session belongs to student_a only.
+    session_a = TutoringSession(student_id=student_a.id, subject_id=subject_id)
+    session.add(session_a)
+    await session.flush()
+
+    # Attempt to write a message for student_b into student_a's session.
+    session.add(Message(
+        session_id=session_a.id, student_id=student_b.id,
+        role="student", content="cross-student write",
+    ))
+    with pytest.raises(IntegrityError):
+        await session.flush()
+
+
+async def test_topic_code_unique_per_subject_not_globally(session):
+    """Two different subjects can share a topic code without conflict."""
+    await _seeded(session)
+    await session.scalar(select(Subject.id).where(Subject.code == "math"))
+
+    # Create a second subject and give it a topic with the same code as a math topic.
+    second_subject = Subject(code="science", name="Science")
+    session.add(second_subject)
+    await session.flush()
+
+    # "functions" already exists in math — it must be allowed in science.
+    second_topic = Topic(
+        subject_id=second_subject.id,
+        code="functions",
+        name="Functions in Science",
+        difficulty=3,
+    )
+    session.add(second_topic)
+    await session.flush()  # must not raise
+
+    count = await session.scalar(
+        select(func.count()).select_from(Topic).where(Topic.code == "functions")
+    )
+    assert count == 2
+
+
+async def test_topic_code_still_unique_within_subject(session):
+    """Duplicate code within the same subject must still be rejected."""
+    await _seeded(session)
+    subject_id = await session.scalar(select(Subject.id).where(Subject.code == "math"))
+
+    duplicate = Topic(
+        subject_id=subject_id, code="arithmetic",
+        name="Duplicate Arithmetic", difficulty=1,
+    )
+    session.add(duplicate)
+    with pytest.raises(IntegrityError):
+        await session.flush()

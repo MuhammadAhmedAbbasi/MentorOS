@@ -100,7 +100,7 @@ async def seed_subject(session: AsyncSession, spec: SubjectSpec) -> dict[str, in
                 description=t.description,
             )
             .on_conflict_do_update(
-                index_elements=[Topic.code],
+                constraint="uq_topics_subject_code",
                 set_={"name": t.name, "difficulty": t.difficulty, "description": t.description},
             )
         )
@@ -108,7 +108,9 @@ async def seed_subject(session: AsyncSession, spec: SubjectSpec) -> dict[str, in
     rows = await session.execute(select(Topic.code, Topic.id).where(Topic.subject_id == subject_id))
     ids = dict(rows.all())
 
-    # Replace this subject's edges so removed prerequisites disappear too.
+    # Replace this subject's prerequisite edges so removed prerequisites disappear.
+    # Retired topics (removed from the spec but referenced in student history) are
+    # intentionally left in the database — see docs/architecture/database-schema.md.
     await session.execute(
         delete(TopicPrerequisite).where(TopicPrerequisite.topic_id.in_(ids.values()))
     )
